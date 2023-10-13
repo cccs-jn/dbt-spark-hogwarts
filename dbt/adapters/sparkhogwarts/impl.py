@@ -16,10 +16,10 @@ import dbt.exceptions
 from dbt.adapters.base import AdapterConfig, PythonJobHelper
 from dbt.adapters.base.impl import catch_as_completed, ConstraintSupport
 from dbt.adapters.sql import SQLAdapter
-from dbt.adapters.spark import SparkConnectionManager
-from dbt.adapters.spark import SparkRelation
-from dbt.adapters.spark import SparkColumn
-from dbt.adapters.spark.python_submissions import (
+from dbt.adapters.sparkhogwarts import SparkConnectionManager
+from dbt.adapters.sparkhogwarts import SparkRelation
+from dbt.adapters.sparkhogwarts import SparkColumn
+from dbt.adapters.sparkhogwarts.python_submissions import (
     JobClusterPythonJobHelper,
     AllPurposeClusterPythonJobHelper,
 )
@@ -60,7 +60,7 @@ class SparkConfig(AdapterConfig):
     merge_update_columns: Optional[str] = None
 
 
-class SparkAdapter(SQLAdapter):
+class SparkHogwartsAdapter(SQLAdapter):
     COLUMN_NAMES = (
         "table_database",
         "table_schema",

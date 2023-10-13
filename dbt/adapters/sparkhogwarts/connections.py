@@ -6,7 +6,7 @@ from dbt.adapters.sql import SQLConnectionManager
 from dbt.contracts.connection import ConnectionState, AdapterResponse
 from dbt.events import AdapterLogger
 from dbt.utils import DECIMALS
-from dbt.adapters.spark import __version__
+from dbt.adapters.sparkhogwarts import __version__
 
 try:
     from TCLIService.ttypes import TOperationState as ThriftState
@@ -89,14 +89,14 @@ class SparkCredentials(Credentials):
 
     def __post_init__(self) -> None:
         # spark classifies database and schema as the same thing
-        if self.database is not None and self.database != self.schema:
-            raise dbt.exceptions.DbtRuntimeError(
-                f"    schema: {self.schema} \n"
-                f"    database: {self.database} \n"
-                f"On Spark, database must be omitted or have the same value as"
-                f" schema."
-            )
-        self.database = None
+        # if self.database is not None and self.database != self.schema:
+        #     raise dbt.exceptions.DbtRuntimeError(
+        #         f"    schema: {self.schema} \n"
+        #         f"    database: {self.database} \n"
+        #         f"On Spark, database must be omitted or have the same value as"
+        #         f" schema."
+        #     )
+        # self.database = None
 
         if self.method == SparkConnectionMethod.ODBC:
             try:
@@ -144,14 +144,14 @@ class SparkCredentials(Credentials):
 
     @property
     def type(self) -> str:
-        return "spark"
+        return "sparkhogwarts"
 
     @property
     def unique_field(self) -> str:
         return self.host
 
     def _connection_keys(self) -> Tuple[str, ...]:
-        return "host", "port", "cluster", "endpoint", "schema", "organization"
+        return "host", "port", "cluster", "endpoint", "schema", "organization", "database"
 
 
 class PyhiveConnectionWrapper(object):
@@ -285,7 +285,7 @@ class PyodbcConnectionWrapper(PyhiveConnectionWrapper):
 
 
 class SparkConnectionManager(SQLConnectionManager):
-    TYPE = "spark"
+    TYPE = "sparkhogwarts"
 
     SPARK_CLUSTER_HTTP_PATH = "/sql/protocolv1/o/{organization}/{cluster}"
     SPARK_SQL_ENDPOINT_HTTP_PATH = "/sql/1.0/endpoints/{endpoint}"
