@@ -75,6 +75,8 @@ class SparkCredentials(Credentials):
     use_ssl: bool = False
     server_side_parameters: Dict[str, Any] = field(default_factory=dict)
     retry_all: bool = False
+    python_module: Optional[str] = None
+    spark_configuration: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def __pre_deserialize__(cls, data: Any) -> Any:
@@ -459,8 +461,7 @@ class SparkConnectionManager(SQLConnectionManager):
                         Connection,
                         SessionConnectionWrapper,
                     )
-
-                    handle = SessionConnectionWrapper(Connection())  # type: ignore
+                    handle = SessionConnectionWrapper(Connection(creds.spark_configuration, creds.python_module))
                 else:
                     raise dbt.exceptions.DbtProfileError(
                         f"invalid credential method: {creds.method}"

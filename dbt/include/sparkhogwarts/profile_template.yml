@@ -1,5 +1,5 @@
 fixed:
-  type: spark
+  type: sparkhogwarts
 prompts:
   host:
     hint: yourorg.sparkhost.com

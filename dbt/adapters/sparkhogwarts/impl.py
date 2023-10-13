@@ -38,6 +38,7 @@ LIST_SCHEMAS_MACRO_NAME = "list_schemas"
 LIST_RELATIONS_MACRO_NAME = "list_relations_without_caching"
 LIST_RELATIONS_SHOW_TABLES_MACRO_NAME = "list_relations_show_tables_without_caching"
 DESCRIBE_TABLE_EXTENDED_MACRO_NAME = "describe_table_extended_without_caching"
+FETCH_TBL_PROPERTIES_MACRO_NAME = "fetch_tbl_properties"
 
 KEY_TABLE_OWNER = "Owner"
 KEY_TABLE_STATISTICS = "Statistics"
@@ -135,7 +136,7 @@ class SparkHogwartsAdapter(SQLAdapter):
     def quote(self, identifier: str) -> str:  # type: ignore
         return "`{}`".format(identifier)
 
-    def _get_relation_information(self, row: agate.Row) -> RelationInfo:
+    def _get_relation_information(self, database: str, row: agate.Row) -> RelationInfo:
         """relation info was fetched with SHOW TABLES EXTENDED"""
         try:
             _schema, name, _, information = row
@@ -146,7 +147,7 @@ class SparkHogwartsAdapter(SQLAdapter):
 
         return _schema, name, information
 
-    def _get_relation_information_using_describe(self, row: agate.Row) -> RelationInfo:
+    def _get_relation_information_using_describe(self, database: str, row: agate.Row) -> RelationInfo:
         """Relation info fetched using SHOW TABLES and an auxiliary DESCRIBE statement"""
         try:
             _schema, name, _ = row
@@ -155,7 +156,7 @@ class SparkHogwartsAdapter(SQLAdapter):
                 f'Invalid value from "show tables ...", got {len(row)} values, expected 3'
             )
 
-        table_name = f"{_schema}.{name}"
+        table_name = f"{database}.{_schema}.{name}"
         try:
             table_results = self.execute_macro(
                 DESCRIBE_TABLE_EXTENDED_MACRO_NAME, kwargs={"table_name": table_name}
@@ -174,13 +175,14 @@ class SparkHogwartsAdapter(SQLAdapter):
 
     def _build_spark_relation_list(
         self,
+        database: str,
         row_list: agate.Table,
         relation_info_func: Callable[[agate.Row], RelationInfo],
     ) -> List[BaseRelation]:
         """Aggregate relations with format metadata included."""
         relations = []
         for row in row_list:
-            _schema, name, information = relation_info_func(row)
+            _schema, name, information = relation_info_func(database, row)
 
             rel_type: RelationType = (
                 RelationType.View if "Type: VIEW" in information else RelationType.Table
@@ -190,6 +192,7 @@ class SparkHogwartsAdapter(SQLAdapter):
             is_iceberg: bool = "Provider: iceberg" in information
 
             relation: BaseRelation = self.Relation.create(
+                database=database
                 schema=_schema,
                 identifier=name,
                 type=rel_type,
@@ -207,11 +210,12 @@ class SparkHogwartsAdapter(SQLAdapter):
         try different methods to fetch relation information."""
 
         kwargs = {"schema_relation": schema_relation}
-
+        database = schema_relation.database
         try:
             # Default compute engine behavior: show tables extended
             show_table_extended_rows = self.execute_macro(LIST_RELATIONS_MACRO_NAME, kwargs=kwargs)
             return self._build_spark_relation_list(
+                database,
                 row_list=show_table_extended_rows,
                 relation_info_func=self._get_relation_information,
             )
@@ -229,6 +233,7 @@ class SparkHogwartsAdapter(SQLAdapter):
                         LIST_RELATIONS_SHOW_TABLES_MACRO_NAME, kwargs=kwargs
                     )
                     return self._build_spark_relation_list(
+                        database,
                         row_list=show_table_rows,
                         relation_info_func=self._get_relation_information_using_describe,
                     )
@@ -338,13 +343,17 @@ class SparkHogwartsAdapter(SQLAdapter):
 
     def _get_columns_for_catalog(self, relation: BaseRelation) -> Iterable[Dict[str, Any]]:
         columns = self.parse_columns_from_information(relation)
-
         for column in columns:
             # convert SparkColumns into catalog dicts
+            # Iceberg information column does not contain the relation's schema
+            # in open source delta 'show table extended' query output doesn't
+            # return relation's schema. if columns are empty from cache,
+            # use get_columns_in_relation spark macro
+            # which would execute 'describe extended tablename' query
             as_dict = column.to_column_dict()
             as_dict["column_name"] = as_dict.pop("column", None)
             as_dict["column_type"] = as_dict.pop("dtype")
-            as_dict["table_database"] = None
+            as_dict["table_database"] = relation.database if relation.is_iceberg else None
             yield as_dict
 
     def get_catalog(self, manifest: Manifest) -> Tuple[agate.Table, List[Exception]]:
